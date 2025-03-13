@@ -1,0 +1,116 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: 'Default'
+
+variables:
+  acrName: 'acr009'  # Replace with your ACR name
+  imageName: 'myimage'  # Image name (shared across both Dockerfiles)
+  tags: 'v1 v2'  # Tags for both Dockerfiles
+  azureSubscription: 'servicetest002'  # Azure subscription name
+
+stages:
+  - stage: Setup
+    displayName: 'Install Docker and Set Up ACR'
+    jobs:
+      - job: InstallAndSetup
+        displayName: 'Install Docker and Setup ACR'
+        steps:
+          - task: DockerInstaller@0
+            inputs:
+              dockerVersion: '17.09.0-ce'
+
+  - stage: BuildAndPushImages
+    displayName: 'Build and Push Docker Images to ACR'
+    dependsOn: Setup
+    jobs:
+      - job: BuildAndPush
+        displayName: 'Build and Push Docker Images'
+        steps:
+          # Checkout the root repository (both Dockerfiles are in the root)
+          - checkout: self
+            displayName: 'Checkout Root Repository'
+
+          # Debugging Step: List the files in the root directory to ensure both Dockerfiles are present
+          - task: Bash@3
+            displayName: 'List files in the root directory'
+            inputs:
+              targetType: inline
+              script: |
+                echo "Listing files in the current directory:"
+                ls -la
+
+          # Login to Azure Container Registry
+          - task: Docker@2
+            displayName: 'Login to Azure Container Registry'
+            inputs:
+              containerRegistry: 'acrtest002'  # Replace with your ACR service connection
+              command: 'login'
+
+          # Build and Push Image from Dockerfile (for both repo1 and repo2)
+          - task: Bash@3
+            displayName: 'Build and Push Dockerfile Image (dockerfile)'
+            inputs:
+              targetType: inline
+              script: |
+                echo "Building Docker image from Dockerfile..."
+                docker build -f Dockerfile -t $(acrName).azurecr.io/repo1/$(imageName):v1 .
+                docker build -f Dockerfile -t $(acrName).azurecr.io/repo2/$(imageName):v1 .
+
+                # Debugging Step: List images after build
+                echo "Listing Docker images after build:"
+                docker images
+
+                echo "Pushing Docker image to repo1 and repo2..."
+                docker push $(acrName).azurecr.io/repo1/$(imageName):v1
+                docker push $(acrName).azurecr.io/repo2/$(imageName):v1
+
+          # Build and Push Image from Dockerfile2 (for both repo1 and repo2)
+          - task: Bash@3
+            displayName: 'Build and Push Dockerfile2 Image (dockerfile1)'
+            inputs:
+              targetType: inline
+              script: |
+                echo "Building Docker image from Dockerfile2..."
+                docker build -f Dockerfile1 -t $(acrName).azurecr.io/repo1/$(imageName):v2 .
+                docker build -f Dockerfile1 -t $(acrName).azurecr.io/repo2/$(imageName):v2 .
+
+                # Debugging Step: List images after build
+                echo "Listing Docker images after build:"
+                docker images
+
+                echo "Pushing Docker image to repo1 and repo2..."
+                docker push $(acrName).azurecr.io/repo1/$(imageName):v2
+                docker push $(acrName).azurecr.io/repo2/$(imageName):v2
+
+          # AzureCLI task to delete tags
+          # - task: AzureCLI@2
+          #   inputs:
+          #     azureSubscription: 'servicetest002'  # Replace with your actual Azure subscription
+          #     scriptType: 'bash'
+          #     scriptLocation: 'inlineScript'
+          #     inlineScript: |
+          #       echo "Deleting images from ACR..."
+                
+          #       echo "Deleting images from ACR..."
+                
+          #       # Fetch and list all tags for the specified repositories
+          #       echo "Fetching tags for repo1/$(imageName)..."
+          #       existing_tags_repo1=$(az acr repository show-tags --name $(acrName) --repository repo1/$(imageName) --output tsv)
+          #       echo "Existing tags for $(repo1)/$(imageName): $existing_tags_repo1"
+
+          #       # Loop through the tags v1 to v5 and untag each for repo1
+          #       for tag in $(tags); do
+          #         echo "Attempting to untag image with tag: $tag from ACR"
+                  
+          #         if echo "$existing_tags_repo1" | grep -q "$tag"; then
+          #           echo "Tag $tag exists. Untagging..."
+          #           # Corrected untagging command
+          #           az acr repository untag --name $(acrName) --image repo1/$(imageName):$tag 
+          #         else
+          #           echo "Tag $tag does not exist. Skipping untagging."
+          #         fi
+          #       done
